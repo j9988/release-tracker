@@ -315,12 +315,50 @@ function Releases({data,addRelease,deleteRelease,update,readOnly=false}){
  )
 }
 
+// Multi-select combobox: pick from existing artists (checkbox-style dropdown),
+// shown as removable chips. Typing a name that isn't in the directory yet still
+// works — Enter (or the "+ Add" row) adds it as free text, same as before.
+function MultiSelectArtists({data,values,onChange,placeholder}){
+ const [query,setQuery]=useState('');
+ const [open,setOpen]=useState(false);
+ const wrapRef=useRef(null);
+ useEffect(()=>{
+  const onDocClick=e=>{ if(wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) };
+  document.addEventListener('mousedown',onDocClick);
+  return ()=>document.removeEventListener('mousedown',onDocClick);
+ },[]);
+ const q=query.trim().toLowerCase();
+ const options=data.artists.map(a=>a.name).filter(n=>!values.includes(n) && (!q || n.toLowerCase().includes(q)));
+ const exactExists=data.artists.some(a=>a.name.toLowerCase()===q);
+ const add=name=>{ const v=name.trim(); if(!v || values.includes(v)) return; onChange([...values,v]); setQuery(''); };
+ const remove=name=>onChange(values.filter(v=>v!==name));
+ return <div className={`multiselect${open?' open':''}`} ref={wrapRef}>
+  <div className="multiselect-box" onClick={()=>setOpen(true)}>
+   {values.map(v=><span className="ms-chip" key={v}>{v}<button type="button" onClick={e=>{e.stopPropagation();remove(v)}}>×</button></span>)}
+   <input
+    value={query}
+    onChange={e=>{setQuery(e.target.value);setOpen(true)}}
+    onFocus={()=>setOpen(true)}
+    onKeyDown={e=>{
+     if(e.key==='Enter'){ e.preventDefault(); if(query.trim()) add(query); }
+     else if(e.key==='Backspace' && !query && values.length) remove(values[values.length-1]);
+    }}
+    placeholder={values.length?'':placeholder}
+   />
+  </div>
+  {open && <div className="multiselect-dropdown">
+   {options.length>0 ? options.map(name=><div key={name} className="ms-option" onMouseDown={()=>add(name)}>{name}</div>) : (!q && <div className="ms-option ms-option-empty">没有更多歌手了</div>)}
+   {q && !exactExists && <div className="ms-option ms-option-new" onMouseDown={()=>add(query)}>＋ 添加 “{query.trim()}”</div>}
+  </div>}
+ </div>
+}
+
 function ReleaseForm({data,initial,onSave,onCancel}){
  const labelOf=name=>data.artists.find(a=>a.name===name)?.label||'';
  const [f,setF]=useState(initial||{date:'',title:'',primaryArtist:data.artists[0]?.name||'',type:'Single',featuredArtists:[],coArtists:[],album:'',label:labelOf(data.artists[0]?.name||''),tags:[],cover:'',links:{spotify:'',youtube:''},notes:''});
- const [featuredText,setFeaturedText]=useState((f.featuredArtists||[]).join(', '));const [coText,setCoText]=useState((f.coArtists||[]).join(', '));const [tagsText,setTagsText]=useState((f.tags||[]).join(', '));
- const set=(k,v)=>setF(x=>({...x,[k]:v})); const setPrimaryArtist=name=>setF(x=>({...x,primaryArtist:name,label:labelOf(name)})); const submit=e=>{e.preventDefault();onSave({...f,featuredArtists:featuredText.split(',').map(s=>s.trim()).filter(Boolean),coArtists:coText.split(',').map(s=>s.trim()).filter(Boolean),tags:tagsText.split(',').map(s=>s.trim()).filter(Boolean),links:f.links||{spotify:'',youtube:''}})};
- return <form className="panel form-panel" onSubmit={submit}><div className="form-head"><div><span className="eyebrow">{initial?'EDIT RELEASE':'NEW RELEASE'}</span><h2>{initial?'Edit release':'Add a release'}</h2></div><button type="button" className="icon-btn" onClick={onCancel}>×</button></div><div className="form-grid"><label>Release date *<input type="date" required value={f.date} onChange={e=>set('date',e.target.value)}/></label><label>Title *<input required value={f.title} onChange={e=>set('title',e.target.value)} placeholder="Song / project title"/></label><label>Primary artist *<select required value={f.primaryArtist} onChange={e=>setPrimaryArtist(e.target.value)}>{data.artists.map(a=><option key={a.id}>{a.name}</option>)}</select></label><label>Release type *<select required value={f.type} onChange={e=>set('type',e.target.value)}>{data.types.map(t=><option key={t}>{t}</option>)}</select></label><label>Featured artists<input value={featuredText} onChange={e=>setFeaturedText(e.target.value)} placeholder="Artist A, Artist B"/></label><label>Co-artists<input value={coText} onChange={e=>setCoText(e.target.value)} placeholder="A, B"/></label><label>Album / EP<input value={f.album} onChange={e=>set('album',e.target.value)} placeholder="Optional project name"/></label><label>Label<select value={f.label} onChange={e=>set('label',e.target.value)}><option value="">Independent (no label)</option>{data.labels.map(l=><option key={l.id} value={l.name}>{l.name}</option>)}</select><small>自动带入所选歌手的 Label，如需要可手动改成其他厂牌。厂牌列表在 Labels 页面管理。</small></label><label className="wide">Tags<input value={tagsText} onChange={e=>setTagsText(e.target.value)} placeholder="K-HipHop, DAYTONA, Favorite"/><small>用逗号分隔；不存在的标签会在保存后自动成为可用标签。</small></label><label className="wide">Cover image URL<input value={f.cover} onChange={e=>set('cover',e.target.value)} placeholder="https://..."/></label><label className="wide">Notes<textarea value={f.notes} onChange={e=>set('notes',e.target.value)} placeholder="Optional notes"/></label></div><div className="form-actions"><button type="button" className="secondary-btn" onClick={onCancel}>Cancel</button><button className="primary-btn">Save release</button></div></form>
+ const [tagsText,setTagsText]=useState((f.tags||[]).join(', '));
+ const set=(k,v)=>setF(x=>({...x,[k]:v})); const setPrimaryArtist=name=>setF(x=>({...x,primaryArtist:name,label:labelOf(name)})); const submit=e=>{e.preventDefault();onSave({...f,featuredArtists:f.featuredArtists||[],coArtists:f.coArtists||[],tags:tagsText.split(',').map(s=>s.trim()).filter(Boolean),links:f.links||{spotify:'',youtube:''}})};
+ return <form className="panel form-panel" onSubmit={submit}><div className="form-head"><div><span className="eyebrow">{initial?'EDIT RELEASE':'NEW RELEASE'}</span><h2>{initial?'Edit release':'Add a release'}</h2></div><button type="button" className="icon-btn" onClick={onCancel}>×</button></div><div className="form-grid"><label>Release date *<input type="date" required value={f.date} onChange={e=>set('date',e.target.value)}/></label><label>Title *<input required value={f.title} onChange={e=>set('title',e.target.value)} placeholder="Song / project title"/></label><label>Primary artist *<select required value={f.primaryArtist} onChange={e=>setPrimaryArtist(e.target.value)}>{data.artists.map(a=><option key={a.id}>{a.name}</option>)}</select></label><label>Release type *<select required value={f.type} onChange={e=>set('type',e.target.value)}>{data.types.map(t=><option key={t}>{t}</option>)}</select></label><label>Featured artists<MultiSelectArtists data={data} values={f.featuredArtists||[]} onChange={v=>set('featuredArtists',v)} placeholder="选择或输入歌手…"/></label><label>Co-artists<MultiSelectArtists data={data} values={f.coArtists||[]} onChange={v=>set('coArtists',v)} placeholder="选择或输入歌手…"/></label><label>Album / EP<input value={f.album} onChange={e=>set('album',e.target.value)} placeholder="Optional project name"/></label><label>Label<select value={f.label} onChange={e=>set('label',e.target.value)}><option value="">Independent (no label)</option>{data.labels.map(l=><option key={l.id} value={l.name}>{l.name}</option>)}</select><small>自动带入所选歌手的 Label，如需要可手动改成其他厂牌。厂牌列表在 Labels 页面管理。</small></label><label className="wide">Tags<input value={tagsText} onChange={e=>setTagsText(e.target.value)} placeholder="K-HipHop, DAYTONA, Favorite"/><small>用逗号分隔；不存在的标签会在保存后自动成为可用标签。</small></label><label className="wide">Cover image URL<input value={f.cover} onChange={e=>set('cover',e.target.value)} placeholder="https://..."/></label><label className="wide">Notes<textarea value={f.notes} onChange={e=>set('notes',e.target.value)} placeholder="Optional notes"/></label></div><div className="form-actions"><button type="button" className="secondary-btn" onClick={onCancel}>Cancel</button><button className="primary-btn">Save release</button></div></form>
 }
 
 function ReleaseTable({releases,onEdit,onDelete,compact=false,readOnly=false}){if(!releases.length)return <Empty/>;return <div className="release-table"><div className="tr th"><span>DATE</span><span>RELEASE</span><span>ARTIST / CREDIT</span><span>TYPE</span><span>TAGS</span>{!compact&&<span/>}</div>{releases.map(r=><div className="tr" key={r.id}><span className="date-cell">{fmtDate(r.date)}<small>{r.date.slice(0,4)}</small></span><span className="title-cell"><strong>{r.title}</strong>{r.album&&<small>{r.album}</small>}</span><span><b>{r.primaryArtist}</b>{r.featuredArtists.length>0&&<small> feat. {r.featuredArtists.join(', ')}</small>}{r.coArtists.length>0&&<small> · {r.coArtists.join(', ')}</small>}</span><span><em className={`type type-${slug(r.type)}`}>{r.type}</em></span><span className="tag-list">{r.tags.slice(0,3).map(t=><i key={t}>#{t}</i>)}{r.tags.length>3&&<i>+{r.tags.length-3}</i>}</span>{!compact&&!readOnly&&<span className="row-actions"><button onClick={()=>onEdit?.(r)}>Edit</button><button onClick={()=>onDelete?.(r.id)}>Delete</button></span>}</div>)}</div>}
