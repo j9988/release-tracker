@@ -98,7 +98,7 @@ function inRange(date,start,end){return date>=start && date<=end}
 // song — it shouldn't count as a credit/appearance for that primary artist's
 // own tracking. Only the featured (and co-) artists get credit for Feat.
 // Every other type counts the primary artist as usual.
-function creditArtists(r){return r.type==='Feat' ? [...r.featuredArtists,...r.coArtists] : [r.primaryArtist,...r.featuredArtists,...r.coArtists]}
+function creditArtists(r){return r.type==='Feat' ? [...r.featuredArtists] : [r.primaryArtist,...r.featuredArtists,...r.coArtists]}
 // Display string for a release's artist credit: "Primary x Co-artists feat. Featured".
 // Co-artists (true collaborators) are joined to the primary with ","; guests stay "feat.".
 function creditLine(r){let s=r.primaryArtist;if(r.coArtists.length)s+=', '+r.coArtists.join(', ');if(r.featuredArtists.length)s+=' feat. '+r.featuredArtists.join(', ');return s}
